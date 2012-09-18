@@ -38,6 +38,7 @@ GLfloat currentScaling[3] = {1.0, 1.0, 1.0};
 
 #define PI 3.14159265359
 GLfloat currentViewAngle[2] = {0.0, PI / 2};
+GLfloat currentView[3] = {0.0, 0.0, 0.0};
 
 /* source image for heightmap */
 Pic * sourceImage;
@@ -56,11 +57,12 @@ GLuint bottomTextureId;
 #define WINDOW_WIDTH 640
 #define WINDOW_HEIGHT 480
 
-#define SKYBOX_DISTANCE 100
-#define SKYBOX_GROUND_DISTANCE 10
+#define HEIGHTMAP_RANGE 100
+
+#define DRAW_SKYBOX 1
+#define DRAW_HEIGHTMAP 1
 
 #define GL_CLAMP_TO_EDGE 0x812F
-
 /* ----------------------------------- FUNCTION PROTOTYPES ------------------------------------------ */
 
 /* This function takes the name of a jpg file and a texture ID (by reference)
@@ -109,8 +111,12 @@ void menufunc(int value);
 /* This function is called by GL whenever it is idle, usually after calling display */
 void doIdle();
 
+/* this function will gather the height */
+GLfloat getHeight(int i, int j);
 
+GLvoid drawSkybox();
 
+GLvoid drawHeightmap();
 
 /* ------------------------------------------ MAIN FUNCTION ------------------------------------------- */
 
@@ -180,6 +186,8 @@ int main ( int argc, char** argv )
 	glutAddMenuEntry("Save Image", 0);
 	glutAddMenuEntry("Quit", 1);
 
+	glutAddMenuEntry("Print View Angle", 2);
+
 	/* Attach menu to right button clicks */
 	glutAttachMenu(GLUT_RIGHT_BUTTON);
 
@@ -244,14 +252,14 @@ void InitGL ( GLvoid )
 	glClearColor(0.0f, 0.0f, 0.0f, 0.5f);				// Black Background	
 
 	// load textures
-	loadTexture("texture/front.jpg", frontTextureId);
-	loadTexture("texture/left.jpg", leftTextureId);
-	loadTexture("texture/back.jpg", backTextureId);
-	loadTexture("texture/right.jpg", rightTextureId);
-	loadTexture("texture/up.jpg", topTextureId);
-	loadTexture("texture/down.jpg", bottomTextureId);
+	loadTexture("texture/sky25/front.jpg", frontTextureId);
+	loadTexture("texture/sky25/left.jpg", leftTextureId);
+	loadTexture("texture/sky25/back.jpg", backTextureId);
+	loadTexture("texture/sky25/right.jpg", rightTextureId);
+	loadTexture("texture/sky25/up.jpg", topTextureId);
+	loadTexture("texture/sky25/down.jpg", bottomTextureId);
 
-	/* define lighting  
+	/*
 	GLfloat mat_specular[] = { 1.0, 1.0, 1.0, 1.0 };
 	GLfloat mat_shininess[] = { 50.0 };
 	GLfloat light_position[] = { 1.0, 1.0, 1.0, 0.0 };
@@ -273,7 +281,7 @@ void reshape(int w, int h)
 	glViewport(0,0,w,h);
 	glMatrixMode(GL_PROJECTION);
 	glLoadIdentity();
-	gluPerspective(60, (GLfloat)w / (GLfloat)h, 0.1, 10000.0);
+	gluPerspective(60, aspect, 0.1, 10000.0);
 	glMatrixMode(GL_MODELVIEW);
 }
 
@@ -283,18 +291,231 @@ void display ( void )
 	glLoadIdentity();
 
 	/* set view of the camera, using polar coordinates of a sphere */
-	if(currentViewAngle[1] > 180)
-		currentViewAngle[1] = 180;
-	else if(currentViewAngle[1] < 0)
-		currentViewAngle[1] = 0;
 
-	GLfloat currentView[3] = {cos(currentViewAngle[0]) * sin(currentViewAngle[1]), sin(currentViewAngle[0]) * sin(currentViewAngle[1]), cos(currentViewAngle[1])};
+	currentView[0] = cos(currentViewAngle[0]) * sin(currentViewAngle[1]);
+	currentView[1] = sin(currentViewAngle[0]) * sin(currentViewAngle[1]);
+	currentView[2] = cos(currentViewAngle[1]);
+
 	gluLookAt(currentTranslation[0], currentTranslation[1], currentTranslation[2], currentView[0] + currentTranslation[0], currentView[1] + currentTranslation[1], currentView[2] + currentTranslation[2], 0, 0, 1);
+	glScalef(currentScaling[0], currentScaling[1], currentScaling[2]);
 
 	/* Clear buffers */
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
 	/* draw skybox */
+
+	if(DRAW_SKYBOX)
+		drawSkybox();
+
+	if(DRAW_HEIGHTMAP)
+		drawHeightmap();
+
+	
+
+	/* Swap buffers, so one we just drew is displayed */
+	glutSwapBuffers();
+}
+
+void saveScreenshot (char *filename)
+{
+	int i;
+	Pic *in = NULL;
+
+	if (filename == NULL)
+		return;
+
+	/* Allocate a picture buffer */
+	in = pic_alloc(WINDOW_WIDTH, WINDOW_HEIGHT, 3, NULL);
+
+	printf("File to save to: %s\n", filename);
+
+	/* Loop over each row of the image and copy into the image */
+	for (i=WINDOW_HEIGHT-1; i>=0; i--) {
+		glReadPixels(0, WINDOW_HEIGHT-1-i, WINDOW_WIDTH, 1, GL_RGB,
+			GL_UNSIGNED_BYTE, &in->pix[i*in->nx*in->bpp]);
+	}
+
+	/* Output the file */
+	if (jpeg_write(filename, in)) {
+		printf("File saved Successfully\n");
+	} else {
+		printf("Error in Saving\n");
+	}
+
+	/* Free memory used by image */
+	pic_free(in);
+}
+
+void mousedrag(int x, int y)
+{
+	int mousePosChange[2] = {x-mousePos[0], y-mousePos[1]};
+
+	/* Check which state we are in. */
+	switch (currentControlState)
+	{
+	case TRANSLATE:
+		if (leftMouseButtonState)
+		{
+			float theta = PI - currentViewAngle[0];
+			
+			// move mouse left or right
+			currentTranslation[0] -= (mousePosChange[0] * sin(theta)) * 0.3;
+			currentTranslation[1] -= (mousePosChange[0] * cos(theta)) * 0.3;
+
+			theta = currentViewAngle[0];
+
+			// move mouse up or down
+			currentTranslation[0] += (mousePosChange[1] * cos(theta)) * 0.3;
+			currentTranslation[1] += (mousePosChange[1] * sin(theta)) * 0.3;
+		}
+		if (middleMouseButtonState)
+		{
+			currentTranslation[2] += mousePosChange[1]*0.3;
+		}
+		break;
+	case ROTATE:
+		if (leftMouseButtonState)
+		{
+			currentViewAngle[0] -= mousePosChange[0]*0.004;
+			currentViewAngle[1] += mousePosChange[1]*0.004;
+		}
+		if (middleMouseButtonState)
+		{
+			currentViewAngle[1] += mousePosChange[1]*0.005;
+		}
+
+		// limits the view angles
+		if(currentViewAngle[1] > PI)
+			currentViewAngle[1] = PI - .0001;
+		if(currentViewAngle[1] < 0)
+			currentViewAngle[1] = .0001;
+
+		break;
+	case SCALE:
+		if (leftMouseButtonState)
+		{
+			currentScaling[0] *= 1.0+mousePosChange[0]*0.001;
+			currentScaling[1] *= 1.0-mousePosChange[1]*0.001;
+		}
+		if (middleMouseButtonState)
+		{
+			currentScaling[2] *= 1.0-mousePosChange[1]*0.001;
+		}
+		break;
+	}
+
+	/* Update stored mouse position */
+	mousePos[0] = x;
+	mousePos[1] = y;
+}
+
+void mouseidle(int x, int y)
+{
+	/* Update mouse position */
+	mousePos[0] = x;
+	mousePos[1] = y;
+}
+
+void mousebutton(int button, int state, int x, int y)
+{
+
+	/* Check which button was pressed and update stored mouse state */
+	switch (button)
+	{
+	case GLUT_LEFT_BUTTON:
+		leftMouseButtonState = (state==GLUT_DOWN);
+		break;
+	case GLUT_MIDDLE_BUTTON:
+		middleMouseButtonState = (state==GLUT_DOWN);
+		break;
+	case GLUT_RIGHT_BUTTON:
+		rightMouseButtonState = (state==GLUT_DOWN);
+		break;
+	}
+
+	/* Check what modifier keys (shift, ctrl, etc) are pressed and update the
+	* control mode based off of which keys are pressed */
+	switch(glutGetModifiers())
+	{
+	case GLUT_ACTIVE_CTRL:
+		currentControlState = TRANSLATE;
+		break;
+	case GLUT_ACTIVE_SHIFT:
+		currentControlState = SCALE;
+		break;
+	default:
+		currentControlState = ROTATE;
+		break;
+	}
+
+	/* Update stored mouse position */
+	mousePos[0] = x;
+	mousePos[1] = y;
+}
+
+void keyboard (unsigned char key, int x, int y)
+{
+
+	/* User pressed quit key */
+	if(key == 'q' || key == 'Q' || key == 27) {
+		exit(0);
+	}
+}
+
+void menufunc(int value)
+{
+	switch (value)
+	{
+	case 0:
+		printf("save file as: \n");
+		char outf[100];
+		cin >> outf;
+		saveScreenshot(outf);
+		break;
+
+	case 1:
+		exit(0);
+		break;
+	
+	case 2:
+		printf("Current Angle is: %f\n", currentViewAngle[0]);
+		break;
+	}
+}
+
+void doIdle()
+{
+	/* do some stuff... */
+
+	/* make the screen update. */
+	glutPostRedisplay(); 
+}
+
+GLfloat getHeight(int i, int j)
+{
+	GLfloat red = PIC_PIXEL(sourceImage, i, j, 0);
+	GLfloat green = PIC_PIXEL(sourceImage, i, j, 1);
+	GLfloat blue = PIC_PIXEL(sourceImage, i, j, 2);
+
+	return (red + green + blue) / (3 * (255 / HEIGHTMAP_RANGE));
+}
+
+GLvoid drawSkybox()
+{
+	// Store the current matrix
+    glPushMatrix();
+ 
+    // Reset and transform the matrix.
+    glLoadIdentity();
+
+	gluLookAt(0, 0, 0, currentView[0], currentView[1], currentView[2], 0, 0, 1);
+ 
+    // Enable/Disable features
+    glPushAttrib(GL_ENABLE_BIT);
+    glEnable(GL_TEXTURE_2D);
+    glDisable(GL_DEPTH_TEST);
+    glDisable(GL_LIGHTING);
+    glDisable(GL_BLEND);
 
 	/* Texture coordinates */
 	float t1[] = {1.0, 1.0};
@@ -312,19 +533,6 @@ void display ( void )
 	float v7[] = {-1.0,  1.0,  1.0};
 	float v8[] = {-1.0,  1.0, -1.0};
 
-	for(int i = 0; i < 3; i++)
-	{
-		v1[i] *= SKYBOX_DISTANCE;
-		v2[i] *= SKYBOX_DISTANCE;
-		v3[i] *= SKYBOX_DISTANCE;
-		v4[i] *= SKYBOX_DISTANCE;
-		v5[i] *= SKYBOX_DISTANCE;
-		v6[i] *= SKYBOX_DISTANCE;
-		v7[i] *= SKYBOX_DISTANCE;
-		v8[i] *= SKYBOX_DISTANCE;
-	}
-
-	/*
 	glEnable(GL_TEXTURE_2D); // Enable texturing from now on
 
 	glColor3f(1.0, 1.0, 1.0);
@@ -404,16 +612,6 @@ void display ( void )
 	glVertex3fv(v6);
 	glEnd();
 
-	// note that we don't want the ground to be infinitely far away!
-	v4[2] /= SKYBOX_DISTANCE;
-	v4[2] *= SKYBOX_GROUND_DISTANCE;
-	v1[2] /= SKYBOX_DISTANCE;
-	v1[2] *= SKYBOX_GROUND_DISTANCE;
-	v5[2] /= SKYBOX_DISTANCE;
-	v5[2] *= SKYBOX_GROUND_DISTANCE;
-	v8[2] /= SKYBOX_DISTANCE;
-	v8[2] *= SKYBOX_GROUND_DISTANCE;
-
 	glBindTexture(GL_TEXTURE_2D, bottomTextureId); 
 	glBegin(GL_QUADS);
 	glTexCoord2fv(t1);
@@ -428,203 +626,106 @@ void display ( void )
 	glTexCoord2fv(t4);
 	glVertex3fv(v8);
 	glEnd();
-
-	glDisable(GL_TEXTURE_2D);
-	*/
-
-	/* scale everything but the skybox */
-	glScalef(currentScaling[0], currentScaling[1], currentScaling[2]);
-
-	/* draw shapes here, a wire sphere(no lighting yet) for an example */
-	//glColor3f(1.0, 1.0, 1.0);
-	//glTranslatef(3.0, 0.0, 0.0);
-	//glutWireSphere(2.0, 20, 20);
-
-	/* heightmap */
-	GLfloat height;
-	GLfloat red, green, blue;
-
-	for(int i = sourceImage->nx - 1; i > 1; i--)
-	{
-		glBegin(GL_LINE_STRIP);
-		for(int j = sourceImage->ny - 1; j > 1; j--)
-		{
-			red = PIC_PIXEL(sourceImage, i, j, 0);
-			green = PIC_PIXEL(sourceImage, i, j, 1);
-			blue = PIC_PIXEL(sourceImage, i, j, 2);
-
-			height = (red + green + blue) / 3;
-
-			glColor3f(height / 255, height / 255, height / 255);
-			glVertex3f(i, j, height);
-
-		}
-		glEnd();
-	}
-
 	
+	glDisable(GL_TEXTURE_2D);
 
-
-	/* Swap buffers, so one we just drew is displayed */
-	glutSwapBuffers();
+	 // Restore enable bits and matrix
+    glPopAttrib();
+    glPopMatrix();
 }
 
-void saveScreenshot (char *filename)
+GLvoid drawHeightmap()
 {
-	int i;
-	Pic *in = NULL;
+			/* heightmap */
+		int width = sourceImage->nx;
+		int length = sourceImage->ny;
+		GLfloat height;
+		GLfloat red, green, blue;
 
-	if (filename == NULL)
-		return;
+		GLfloat boxBound = 255 / HEIGHTMAP_RANGE;			// creates pixel range of max at midpoint of skybox
+		GLfloat colorRange = 255 / boxBound;
 
-	/* Allocate a picture buffer */
-	in = pic_alloc(WINDOW_WIDTH, WINDOW_HEIGHT, 3, NULL);
+		glTranslatef(0.0, 0.0, - 1 * HEIGHTMAP_RANGE);
 
-	printf("File to save to: %s\n", filename);
-
-	/* Loop over each row of the image and copy into the image */
-	for (i=WINDOW_HEIGHT-1; i>=0; i--) {
-		glReadPixels(0, WINDOW_HEIGHT-1-i, WINDOW_WIDTH, 1, GL_RGB,
-			GL_UNSIGNED_BYTE, &in->pix[i*in->nx*in->bpp]);
-	}
-
-	/* Output the file */
-	if (jpeg_write(filename, in)) {
-		printf("File saved Successfully\n");
-	} else {
-		printf("Error in Saving\n");
-	}
-
-	/* Free memory used by image */
-	pic_free(in);
-}
-
-void mousedrag(int x, int y)
-{
-	int mousePosChange[2] = {x-mousePos[0], y-mousePos[1]};
-
-	/* Check which state we are in. */
-	switch (currentControlState)
-	{
-	case TRANSLATE:
-		if (leftMouseButtonState)
+		/*
+		glEnable(GL_TEXTURE_2D);
+		glBindTexture(GL_TEXTURE_2D, bottomTextureId);
+		for(int i = 0; i < width - 1; i++)
 		{
-			currentTranslation[0] += mousePosChange[1] * 0.1;
-			currentTranslation[1] -= mousePosChange[0] * 0.1;
+			glBegin(GL_LINE_STRIP);
+
+			height = getHeight(i, 0);
+			glColor3f(height / colorRange, height / colorRange, height / colorRange);
+			glTexCoord2i(i, 0);
+			glVertex3f(i, 0, height);
+
+			height = getHeight(i+1, 0);
+			glColor3f(height / colorRange, height / colorRange, height / colorRange);
+			glTexCoord2i(i+1, 0);
+			glVertex3f(i+1, 0, height);
+
+			for(int j = 0; j < length - 1; j++)
+			{
+				height = getHeight(i+1, j+1);
+				glColor3f(height / colorRange, height / colorRange, height / colorRange);
+				glTexCoord2i(i+1, j+1);
+				glVertex3f(i+1, j+1, height);
+
+				height = getHeight(i, j+1);
+				glColor3f(height / colorRange, height / colorRange, height / colorRange);
+				glTexCoord2i(i, j+1);
+				glVertex3f(i, j+1, height);
+			}
+			glEnd();
 		}
-		if (middleMouseButtonState)
+		
+		glDisable(GL_TEXTURE_2D);
+		*/
+
+		
+		
+		//glEnable(GL_TEXTURE_2D);
+		//glBindTexture(GL_TEXTURE_2D, bottomTextureId);
+
+		for(int i = width - 1; i > 1; i--)
 		{
-			currentTranslation[2] += mousePosChange[1]*0.1;
+			glBegin(GL_LINE_STRIP);
+			for(int j = length - 1; j > 1; j--)
+			{
+				red = PIC_PIXEL(sourceImage, i, j, 0);
+				green = PIC_PIXEL(sourceImage, i, j, 1);
+				blue = PIC_PIXEL(sourceImage, i, j, 2);
+
+				height = (red + green + blue) / (3 * boxBound);
+
+				glColor3f(height / colorRange, height / colorRange, height / colorRange);
+
+				//glTexCoord2f(i, j);
+				glVertex3f(i - width / 2, j - length / 2, height);
+
+			}
+			glEnd();
 		}
-		break;
-	case ROTATE:
-		if (leftMouseButtonState)
+	
+		for(int i = length - 1; i > 1; i--)
 		{
-			currentViewAngle[0] -= mousePosChange[0]*0.004;
-			currentViewAngle[1] += mousePosChange[1]*0.004;
+			glBegin(GL_LINE_STRIP);
+			for(int j = width - 1; j > 1; j--)
+			{
+				red = PIC_PIXEL(sourceImage, j, i, 0);
+				green = PIC_PIXEL(sourceImage, j, i, 1);
+				blue = PIC_PIXEL(sourceImage, j, i, 2);
 
-			//currentRotation[0] += mousePosChange[1];
-			//currentRotation[1] += mousePosChange[0];
+				height = (red + green + blue) / (3 * boxBound);
+
+				glColor3f(height / colorRange, height / colorRange, height / colorRange);
+
+				//glTexCoord2f(i, j);
+				glVertex3f(j - width / 2, i - length / 2, height);
+
+			}
+			glEnd();
 		}
-		if (middleMouseButtonState)
-		{
-			currentViewAngle[1] += mousePosChange[1]*0.005;
-			//currentRotation[2] += mousePosChange[1];
-		}
-		break;
-	case SCALE:
-		if (leftMouseButtonState)
-		{
-			currentScaling[0] *= 1.0+mousePosChange[0]*0.01;
-			currentScaling[1] *= 1.0-mousePosChange[1]*0.01;
-		}
-		if (middleMouseButtonState)
-		{
-			currentScaling[2] *= 1.0-mousePosChange[1]*0.01;
-		}
-		break;
-	}
-
-	/* Update stored mouse position */
-	mousePos[0] = x;
-	mousePos[1] = y;
+		//glDisable(GL_TEXTURE_2D);
+		
 }
-
-void mouseidle(int x, int y)
-{
-	/* Update mouse position */
-	mousePos[0] = x;
-	mousePos[1] = y;
-}
-
-void mousebutton(int button, int state, int x, int y)
-{
-
-	/* Check which button was pressed and update stored mouse state */
-	switch (button)
-	{
-	case GLUT_LEFT_BUTTON:
-		leftMouseButtonState = (state==GLUT_DOWN);
-		break;
-	case GLUT_MIDDLE_BUTTON:
-		middleMouseButtonState = (state==GLUT_DOWN);
-		break;
-	case GLUT_RIGHT_BUTTON:
-		rightMouseButtonState = (state==GLUT_DOWN);
-		break;
-	}
-
-	/* Check what modifier keys (shift, ctrl, etc) are pressed and update the
-	* control mode based off of which keys are pressed */
-	switch(glutGetModifiers())
-	{
-	case GLUT_ACTIVE_CTRL:
-		currentControlState = TRANSLATE;
-		break;
-	case GLUT_ACTIVE_SHIFT:
-		currentControlState = SCALE;
-		break;
-	default:
-		currentControlState = ROTATE;
-		break;
-	}
-
-	/* Update stored mouse position */
-	mousePos[0] = x;
-	mousePos[1] = y;
-}
-
-void keyboard (unsigned char key, int x, int y)
-{
-
-	/* User pressed quit key */
-	if(key == 'q' || key == 'Q' || key == 27) {
-		exit(0);
-	}
-}
-
-void menufunc(int value)
-{
-	switch (value)
-	{
-	case 0:
-		printf("save file as: \n");
-		char outf[100];
-		cin >> outf;
-		saveScreenshot(outf);
-		break;
-
-	case 1:
-		exit(0);
-		break;
-	}
-}
-
-void doIdle()
-{
-	/* do some stuff... */
-
-	/* make the screen update. */
-	glutPostRedisplay(); 
-}
-

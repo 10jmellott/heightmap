@@ -16,6 +16,24 @@ used to render this mesh within a skybox.
 ```
 
 ##progress##
+###Ver. 2###
+Interaction is complete.
++ Skybox no longer can be translated
++ Objects in scene move accordingly
++ Control will shift the camera
++ Shift will scale the scene
++ Left clicking will rotate the camera
+
+Skybox has an updated texture with better resolution.
+
+Heightmap still isn't complete
++ Heightmap still only uses GL_LINE_STRIP for its values
++ Heightmap is not the texture of the ground yet
+
+Code has been cleaned up and additional functions have been added
++ ```drawSkybox()``` and ```drawHeightmap()```
++ ```#define GL_CLAMP_TO_EDGE 0x812F``` has been added to poor texture borders
+
 ###Ver. 1###
 Skybox has been changed to be the appropriate size. Denoted as ```SKYBOX_DISTANCE```.
 
@@ -27,11 +45,10 @@ Interaction is nearly complete.
 + Pressing control will move the camera
 + The camera needs to be able to move along with the direction of view
 
-Heightmap is partially complete
+Heightmap is partially complete.
 + heightmap only records using ```GL_LINE_STRIP``` as opposed to ```GL_TRIANGLE_STRIP```
 + heightmap will read any image in
 + heightmap currently reads only the image noted in the main function for debug purposes
-
 
 
 ###Ver. 0###
