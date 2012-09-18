@@ -56,17 +56,20 @@ GLuint bottomTextureId;
 #define WINDOW_WIDTH 640
 #define WINDOW_HEIGHT 480
 
-#define SKYBOX_DISTANCE 10
+#define SKYBOX_DISTANCE 100
+#define SKYBOX_GROUND_DISTANCE 10
+
+#define GL_CLAMP_TO_EDGE 0x812F
 
 /* ----------------------------------- FUNCTION PROTOTYPES ------------------------------------------ */
 
 /* This function takes the name of a jpg file and a texture ID (by reference)
- * It creates a texture from the image specified and sets the ID specified to the value OpenGL generates for that texture */
+* It creates a texture from the image specified and sets the ID specified to the value OpenGL generates for that texture */
 void loadTexture (char *filename, GLuint &textureID);
 
 /* initGL will perform the one time initialization by
- * setting some state variables that are not going to
- * be changed */
+* setting some state variables that are not going to
+* be changed */
 void InitGL ( GLvoid );
 
 /* sets the reshape callback for the current window */
@@ -88,19 +91,19 @@ void saveScreenshot (char *filename);
 void mousedrag(int x, int y);
 
 /* This function is called by GL when the mouse moves passively.
- * "Passively" means that no mouse button is being held down */
+* "Passively" means that no mouse button is being held down */
 void mouseidle(int x, int y);
 
 /* This is called by GL whenever a mouse button is pressed. */
 void mousebutton(int button, int state, int x, int y);
 
 /* This function will be called by GL whenever a keyboard key is pressed.
- * It recieves the ASCII value of the key that was pressed, along with the x
- * and y coordinates of the mouse at the time the key was pressed. */
+* It recieves the ASCII value of the key that was pressed, along with the x
+* and y coordinates of the mouse at the time the key was pressed. */
 void keyboard (unsigned char key, int x, int y);
 
 /* Function that GL runs once a menu selection has been made.
- * This receives the number of the menu item that was selected */
+* This receives the number of the menu item that was selected */
 void menufunc(int value);
 
 /* This function is called by GL whenever it is idle, usually after calling display */
@@ -116,15 +119,15 @@ int main ( int argc, char** argv )
 	/*
 	if (argc<2)// if not specified, prompt for filename
 	{
-		char inputFile[999];
-		printf("Input height file:");
-		cin>>inputFile;
-		sourceImage = jpeg_read(inputFile, NULL);
+	char inputFile[999];
+	printf("Input height file:");
+	cin>>inputFile;
+	sourceImage = jpeg_read(inputFile, NULL);
 	}
 	else //otherwise, use the name provided
 	{
-		/* Open jpeg (reads into memory) 
-		sourceImage = jpeg_read(argv[1], NULL);
+	/* Open jpeg (reads into memory) 
+	sourceImage = jpeg_read(argv[1], NULL);
 	}
 	*/
 
@@ -132,13 +135,15 @@ int main ( int argc, char** argv )
 
 	//TODO: intialize heightmap
 
+	/*
 	//this is an example of reading image data, you will use the pixel values to determine the height of the map at each node 
-	//int heightmapxy=PIC_PIXEL(sourceImage , x, y, 0);
+	int heightmapxy=PIC_PIXEL(sourceImage , 0, 0, 0);
 	//for color image data:
-	//int red = PIC_PIXEL(sourceImage , 0, 0, 0);
-	//int green = PIC_PIXEL(sourceImage , 0, 0, 1);
-	//int blue = PIC_PIXEL(sourceImage , 0, 0, 2);
-	//cout<<"\nThe (r,g,b) value at the upper left corner is ("<<red<<","<<green<<","<<blue<<")\n";
+	int red = PIC_PIXEL(sourceImage , 0, 0, 0);
+	int green = PIC_PIXEL(sourceImage , 0, 0, 1);
+	int blue = PIC_PIXEL(sourceImage , 0, 0, 2);
+	cout<<"\nThe (r,g,b) value at the upper left corner is ("<<red<<","<<green<<","<<blue<<")\n";
+	*/
 
 	/* Initialize glut */
 	glutInit(&argc, argv);
@@ -221,8 +226,8 @@ void loadTexture (char *filename, GLuint &textureID)
 	/* set some texture parameters */
 	glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR );
 	glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR_MIPMAP_LINEAR );
-	glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_WRAP_S,GL_CLAMP);
-	glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_WRAP_T,GL_CLAMP);
+	glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_WRAP_S,GL_CLAMP_TO_EDGE);
+	glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_WRAP_T,GL_CLAMP_TO_EDGE);
 
 	/* Load the texture into OpenGL as a mipmap. !!! This is a very important step !!! */
 	gluBuild2DMipmaps(GL_TEXTURE_2D, GL_RGB, pBitMap->nx, pBitMap->ny, GL_RGB, GL_UNSIGNED_BYTE, pBitMap->pix);
@@ -246,6 +251,19 @@ void InitGL ( GLvoid )
 	loadTexture("texture/up.jpg", topTextureId);
 	loadTexture("texture/down.jpg", bottomTextureId);
 
+	/* define lighting  
+	GLfloat mat_specular[] = { 1.0, 1.0, 1.0, 1.0 };
+	GLfloat mat_shininess[] = { 50.0 };
+	GLfloat light_position[] = { 1.0, 1.0, 1.0, 0.0 };
+
+	glMaterialfv(GL_FRONT, GL_SPECULAR, mat_specular);
+	glMaterialfv(GL_FRONT, GL_SHININESS, mat_shininess);
+	glLightfv(GL_LIGHT0, GL_POSITION, light_position);
+
+	glEnable(GL_LIGHTING);
+	glEnable(GL_LIGHT0);
+	*/
+
 	/* display lists go here */
 }
 
@@ -261,15 +279,17 @@ void reshape(int w, int h)
 
 void display ( void )
 {
-	/* replace this code with your height field implementation */
-	/* you may also want to precede it with your rotation/translation/scaling */
-
 	glMatrixMode(GL_MODELVIEW);
 	glLoadIdentity();
 
-	/* set view, camera always at position 0,0,0 */
+	/* set view of the camera, using polar coordinates of a sphere */
+	if(currentViewAngle[1] > 180)
+		currentViewAngle[1] = 180;
+	else if(currentViewAngle[1] < 0)
+		currentViewAngle[1] = 0;
+
 	GLfloat currentView[3] = {cos(currentViewAngle[0]) * sin(currentViewAngle[1]), sin(currentViewAngle[0]) * sin(currentViewAngle[1]), cos(currentViewAngle[1])};
-	gluLookAt(0, 0, 0, currentView[0], currentView[1], currentView[2], 0, 0, 1);
+	gluLookAt(currentTranslation[0], currentTranslation[1], currentTranslation[2], currentView[0] + currentTranslation[0], currentView[1] + currentTranslation[1], currentView[2] + currentTranslation[2], 0, 0, 1);
 
 	/* Clear buffers */
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
@@ -292,107 +312,158 @@ void display ( void )
 	float v7[] = {-1.0,  1.0,  1.0};
 	float v8[] = {-1.0,  1.0, -1.0};
 
+	for(int i = 0; i < 3; i++)
+	{
+		v1[i] *= SKYBOX_DISTANCE;
+		v2[i] *= SKYBOX_DISTANCE;
+		v3[i] *= SKYBOX_DISTANCE;
+		v4[i] *= SKYBOX_DISTANCE;
+		v5[i] *= SKYBOX_DISTANCE;
+		v6[i] *= SKYBOX_DISTANCE;
+		v7[i] *= SKYBOX_DISTANCE;
+		v8[i] *= SKYBOX_DISTANCE;
+	}
+
+	/*
 	glEnable(GL_TEXTURE_2D); // Enable texturing from now on
-		
-		glColor3f(1.0, 1.0, 1.0);
 
-		glBindTexture(GL_TEXTURE_2D, frontTextureId); 
-		glBegin(GL_QUADS);
-			glTexCoord2fv(t1);
-			glVertex3fv(v4);
+	glColor3f(1.0, 1.0, 1.0);
 
-			glTexCoord2fv(t2);
-			glVertex3fv(v3);
+	glBindTexture(GL_TEXTURE_2D, frontTextureId); 
+	glBegin(GL_QUADS);
+	glTexCoord2fv(t1);
+	glVertex3fv(v4);
 
-			glTexCoord2fv(t3);
-			glVertex3fv(v2);
+	glTexCoord2fv(t2);
+	glVertex3fv(v3);
 
-			glTexCoord2fv(t4);
-			glVertex3fv(v1);
-		glEnd();
+	glTexCoord2fv(t3);
+	glVertex3fv(v2);
 
-		glBindTexture(GL_TEXTURE_2D, rightTextureId); 
-		glBegin(GL_QUADS);
-			glTexCoord2fv(t1);
-			glVertex3fv(v1);
+	glTexCoord2fv(t4);
+	glVertex3fv(v1);
+	glEnd();
 
-			glTexCoord2fv(t2);
-			glVertex3fv(v2);
+	glBindTexture(GL_TEXTURE_2D, rightTextureId); 
+	glBegin(GL_QUADS);
+	glTexCoord2fv(t1);
+	glVertex3fv(v1);
 
-			glTexCoord2fv(t3);
-			glVertex3fv(v6);
+	glTexCoord2fv(t2);
+	glVertex3fv(v2);
 
-			glTexCoord2fv(t4);
-			glVertex3fv(v5);
-		glEnd();
+	glTexCoord2fv(t3);
+	glVertex3fv(v6);
 
-		glBindTexture(GL_TEXTURE_2D, backTextureId); 
-		glBegin(GL_QUADS);
-			glTexCoord2fv(t1);
-			glVertex3fv(v5);
+	glTexCoord2fv(t4);
+	glVertex3fv(v5);
+	glEnd();
 
-			glTexCoord2fv(t2);
-			glVertex3fv(v6);
+	glBindTexture(GL_TEXTURE_2D, backTextureId); 
+	glBegin(GL_QUADS);
+	glTexCoord2fv(t1);
+	glVertex3fv(v5);
 
-			glTexCoord2fv(t3);
-			glVertex3fv(v7);
+	glTexCoord2fv(t2);
+	glVertex3fv(v6);
 
-			glTexCoord2fv(t4);
-			glVertex3fv(v8);
-		glEnd();
+	glTexCoord2fv(t3);
+	glVertex3fv(v7);
 
-		glBindTexture(GL_TEXTURE_2D, leftTextureId); 
-		glBegin(GL_QUADS);
-			glTexCoord2fv(t1);
-			glVertex3fv(v8);
+	glTexCoord2fv(t4);
+	glVertex3fv(v8);
+	glEnd();
 
-			glTexCoord2fv(t2);
-			glVertex3fv(v7);
+	glBindTexture(GL_TEXTURE_2D, leftTextureId); 
+	glBegin(GL_QUADS);
+	glTexCoord2fv(t1);
+	glVertex3fv(v8);
 
-			glTexCoord2fv(t3);
-			glVertex3fv(v3);
+	glTexCoord2fv(t2);
+	glVertex3fv(v7);
 
-			glTexCoord2fv(t4);
-			glVertex3fv(v4);
-		glEnd();
+	glTexCoord2fv(t3);
+	glVertex3fv(v3);
 
-		glBindTexture(GL_TEXTURE_2D, topTextureId); 
-		glBegin(GL_QUADS);
-			glTexCoord2fv(t1);
-			glVertex3fv(v2);
+	glTexCoord2fv(t4);
+	glVertex3fv(v4);
+	glEnd();
 
-			glTexCoord2fv(t2);
-			glVertex3fv(v3);
+	glBindTexture(GL_TEXTURE_2D, topTextureId); 
+	glBegin(GL_QUADS);
+	glTexCoord2fv(t1);
+	glVertex3fv(v2);
 
-			glTexCoord2fv(t3);
-			glVertex3fv(v7);
+	glTexCoord2fv(t2);
+	glVertex3fv(v3);
 
-			glTexCoord2fv(t4);
-			glVertex3fv(v6);
-		glEnd();
+	glTexCoord2fv(t3);
+	glVertex3fv(v7);
 
-		glBindTexture(GL_TEXTURE_2D, bottomTextureId); 
-		glBegin(GL_QUADS);
-			glTexCoord2fv(t1);
-			glVertex3fv(v4);
+	glTexCoord2fv(t4);
+	glVertex3fv(v6);
+	glEnd();
 
-			glTexCoord2fv(t2);
-			glVertex3fv(v1);
+	// note that we don't want the ground to be infinitely far away!
+	v4[2] /= SKYBOX_DISTANCE;
+	v4[2] *= SKYBOX_GROUND_DISTANCE;
+	v1[2] /= SKYBOX_DISTANCE;
+	v1[2] *= SKYBOX_GROUND_DISTANCE;
+	v5[2] /= SKYBOX_DISTANCE;
+	v5[2] *= SKYBOX_GROUND_DISTANCE;
+	v8[2] /= SKYBOX_DISTANCE;
+	v8[2] *= SKYBOX_GROUND_DISTANCE;
 
-			glTexCoord2fv(t3);
-			glVertex3fv(v5);
+	glBindTexture(GL_TEXTURE_2D, bottomTextureId); 
+	glBegin(GL_QUADS);
+	glTexCoord2fv(t1);
+	glVertex3fv(v4);
 
-			glTexCoord2fv(t4);
-			glVertex3fv(v8);
-		glEnd();
+	glTexCoord2fv(t2);
+	glVertex3fv(v1);
+
+	glTexCoord2fv(t3);
+	glVertex3fv(v5);
+
+	glTexCoord2fv(t4);
+	glVertex3fv(v8);
+	glEnd();
 
 	glDisable(GL_TEXTURE_2D);
+	*/
 
-	/* transform everything but the skybox */
-	glTranslatef(currentTranslation[0], currentTranslation[1], currentTranslation[2]);
+	/* scale everything but the skybox */
 	glScalef(currentScaling[0], currentScaling[1], currentScaling[2]);
 
-	/* draw shapes here */
+	/* draw shapes here, a wire sphere(no lighting yet) for an example */
+	//glColor3f(1.0, 1.0, 1.0);
+	//glTranslatef(3.0, 0.0, 0.0);
+	//glutWireSphere(2.0, 20, 20);
+
+	/* heightmap */
+	GLfloat height;
+	GLfloat red, green, blue;
+
+	for(int i = sourceImage->nx - 1; i > 1; i--)
+	{
+		glBegin(GL_LINE_STRIP);
+		for(int j = sourceImage->ny - 1; j > 1; j--)
+		{
+			red = PIC_PIXEL(sourceImage, i, j, 0);
+			green = PIC_PIXEL(sourceImage, i, j, 1);
+			blue = PIC_PIXEL(sourceImage, i, j, 2);
+
+			height = (red + green + blue) / 3;
+
+			glColor3f(height / 255, height / 255, height / 255);
+			glVertex3f(i, j, height);
+
+		}
+		glEnd();
+	}
+
+	
+
 
 	/* Swap buffers, so one we just drew is displayed */
 	glutSwapBuffers();
@@ -438,8 +509,8 @@ void mousedrag(int x, int y)
 	case TRANSLATE:
 		if (leftMouseButtonState)
 		{
-			currentTranslation[0] += mousePosChange[0]*0.1;
-			currentTranslation[1] -= mousePosChange[1]*0.1;
+			currentTranslation[0] += mousePosChange[1] * 0.1;
+			currentTranslation[1] -= mousePosChange[0] * 0.1;
 		}
 		if (middleMouseButtonState)
 		{
