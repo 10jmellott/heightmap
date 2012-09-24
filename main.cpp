@@ -44,9 +44,6 @@ GLfloat currentView[3] = {0.0, 0.0, 0.0};
 Pic * sourceImage;
 
 /* Texture ids */
-/* Each texture has to have its own id (you will need 6 for the skybox),
-they are assigned using glGenTextures, which provides a unique integer identifying that texture which you can load using glLoadTexture
-before drawing shapes with texturing */
 GLuint frontTextureId;
 GLuint leftTextureId;
 GLuint backTextureId;
@@ -54,15 +51,23 @@ GLuint rightTextureId;
 GLuint topTextureId;
 GLuint bottomTextureId;
 
+// default window width and height
 #define WINDOW_WIDTH 640
 #define WINDOW_HEIGHT 480
 
+// default maximum height in pixels of the heightmap
 #define HEIGHTMAP_RANGE 100
 
+// options to enable(1) and or disable(0)
 #define DRAW_SKYBOX 1
 #define DRAW_HEIGHTMAP 1
 
+// if the skybox is to be scaled
+#define SCALE_SKYBOX 0
+
+// defined to remove the black edges along the textures
 #define GL_CLAMP_TO_EDGE 0x812F
+
 /* ----------------------------------- FUNCTION PROTOTYPES ------------------------------------------ */
 
 /* This function takes the name of a jpg file and a texture ID (by reference)
@@ -122,34 +127,22 @@ GLvoid drawHeightmap();
 
 int main ( int argc, char** argv )
 {
-	/*
-	if (argc<2)// if not specified, prompt for filename
+	/* aquire filename from option or prompt */
+	if (argc<2)
 	{
-	char inputFile[999];
-	printf("Input height file:");
-	cin>>inputFile;
-	sourceImage = jpeg_read(inputFile, NULL);
+		char inputFile[100];
+		printf("Input height file:");
+		cin>>inputFile;
+		sourceImage = jpeg_read(inputFile, NULL);
 	}
-	else //otherwise, use the name provided
+	else
 	{
-	/* Open jpeg (reads into memory) 
-	sourceImage = jpeg_read(argv[1], NULL);
+		sourceImage = jpeg_read(argv[1], NULL);
 	}
-	*/
 
-	sourceImage = jpeg_read("hflab4.jpg", NULL);
-
-	//TODO: intialize heightmap
-
-	/*
-	//this is an example of reading image data, you will use the pixel values to determine the height of the map at each node 
-	int heightmapxy=PIC_PIXEL(sourceImage , 0, 0, 0);
-	//for color image data:
-	int red = PIC_PIXEL(sourceImage , 0, 0, 0);
-	int green = PIC_PIXEL(sourceImage , 0, 0, 1);
-	int blue = PIC_PIXEL(sourceImage , 0, 0, 2);
-	cout<<"\nThe (r,g,b) value at the upper left corner is ("<<red<<","<<green<<","<<blue<<")\n";
-	*/
+	// if the heightmap image couldn't be found
+	if(sourceImage == NULL)
+		return EXIT_FAILURE;
 
 	/* Initialize glut */
 	glutInit(&argc, argv);
@@ -164,7 +157,7 @@ int main ( int argc, char** argv )
 	glutInitWindowSize(WINDOW_WIDTH, WINDOW_HEIGHT);
 
 	/* Create the window */
-	glutCreateWindow( "CMPSC 458: Heightmap" ); // Window Title (argv[0] for current directory as title)
+	glutCreateWindow( "CMPSC 458: Heightmap" );
 
 	/**** Call to our initialization routine****/
 	InitGL ();
@@ -185,8 +178,6 @@ int main ( int argc, char** argv )
 	/* Add quit option to menu */
 	glutAddMenuEntry("Save Image", 0);
 	glutAddMenuEntry("Quit", 1);
-
-	glutAddMenuEntry("Print View Angle", 2);
 
 	/* Attach menu to right button clicks */
 	glutAttachMenu(GLUT_RIGHT_BUTTON);
@@ -258,21 +249,6 @@ void InitGL ( GLvoid )
 	loadTexture("texture/sky25/right.jpg", rightTextureId);
 	loadTexture("texture/sky25/up.jpg", topTextureId);
 	loadTexture("texture/sky25/down.jpg", bottomTextureId);
-
-	/*
-	GLfloat mat_specular[] = { 1.0, 1.0, 1.0, 1.0 };
-	GLfloat mat_shininess[] = { 50.0 };
-	GLfloat light_position[] = { 1.0, 1.0, 1.0, 0.0 };
-
-	glMaterialfv(GL_FRONT, GL_SPECULAR, mat_specular);
-	glMaterialfv(GL_FRONT, GL_SHININESS, mat_shininess);
-	glLightfv(GL_LIGHT0, GL_POSITION, light_position);
-
-	glEnable(GL_LIGHTING);
-	glEnable(GL_LIGHT0);
-	*/
-
-	/* display lists go here */
 }
 
 void reshape(int w, int h)
@@ -467,7 +443,7 @@ void menufunc(int value)
 	switch (value)
 	{
 	case 0:
-		printf("save file as: \n");
+		printf("Save file as: \n");
 		char outf[100];
 		cin >> outf;
 		saveScreenshot(outf);
@@ -475,10 +451,6 @@ void menufunc(int value)
 
 	case 1:
 		exit(0);
-		break;
-	
-	case 2:
-		printf("Current Angle is: %f\n", currentViewAngle[0]);
 		break;
 	}
 }
@@ -508,14 +480,16 @@ GLvoid drawSkybox()
     // Reset and transform the matrix.
     glLoadIdentity();
 
+	// sets the viewing angle to the values calculated in display()
 	gluLookAt(0, 0, 0, currentView[0], currentView[1], currentView[2], 0, 0, 1);
  
     // Enable/Disable features
     glPushAttrib(GL_ENABLE_BIT);
     glEnable(GL_TEXTURE_2D);
     glDisable(GL_DEPTH_TEST);
-    glDisable(GL_LIGHTING);
-    glDisable(GL_BLEND);
+
+	if(SCALE_SKYBOX)
+		glScalef(currentScaling[0], currentScaling[1], currentScaling[1]);
 
 	/* Texture coordinates */
 	float t1[] = {1.0, 1.0};
@@ -636,73 +610,26 @@ GLvoid drawSkybox()
 
 GLvoid drawHeightmap()
 {
-			/* heightmap */
+		/* heightmap */
 		int width = sourceImage->nx;
 		int length = sourceImage->ny;
 		GLfloat height;
-		GLfloat red, green, blue;
+		GLfloat colorRange = HEIGHTMAP_RANGE;
 
-		GLfloat boxBound = 255 / HEIGHTMAP_RANGE;			// creates pixel range of max at midpoint of skybox
-		GLfloat colorRange = 255 / boxBound;
-
+		// drops the heightmap down to the level of the user
 		glTranslatef(0.0, 0.0, - 1 * HEIGHTMAP_RANGE);
 
-		/*
-		glEnable(GL_TEXTURE_2D);
-		glBindTexture(GL_TEXTURE_2D, bottomTextureId);
-		for(int i = 0; i < width - 1; i++)
-		{
-			glBegin(GL_LINE_STRIP);
-
-			height = getHeight(i, 0);
-			glColor3f(height / colorRange, height / colorRange, height / colorRange);
-			glTexCoord2i(i, 0);
-			glVertex3f(i, 0, height);
-
-			height = getHeight(i+1, 0);
-			glColor3f(height / colorRange, height / colorRange, height / colorRange);
-			glTexCoord2i(i+1, 0);
-			glVertex3f(i+1, 0, height);
-
-			for(int j = 0; j < length - 1; j++)
-			{
-				height = getHeight(i+1, j+1);
-				glColor3f(height / colorRange, height / colorRange, height / colorRange);
-				glTexCoord2i(i+1, j+1);
-				glVertex3f(i+1, j+1, height);
-
-				height = getHeight(i, j+1);
-				glColor3f(height / colorRange, height / colorRange, height / colorRange);
-				glTexCoord2i(i, j+1);
-				glVertex3f(i, j+1, height);
-			}
-			glEnd();
-		}
-		
-		glDisable(GL_TEXTURE_2D);
-		*/
-
-		
-		
-		//glEnable(GL_TEXTURE_2D);
-		//glBindTexture(GL_TEXTURE_2D, bottomTextureId);
-
+		// the following will draw a cross pasttern, as opposed to triangles
+		//   and allows for a much more standard mesh appearance
+		// initially centered at the location of the user
 		for(int i = width - 1; i > 1; i--)
 		{
 			glBegin(GL_LINE_STRIP);
 			for(int j = length - 1; j > 1; j--)
 			{
-				red = PIC_PIXEL(sourceImage, i, j, 0);
-				green = PIC_PIXEL(sourceImage, i, j, 1);
-				blue = PIC_PIXEL(sourceImage, i, j, 2);
-
-				height = (red + green + blue) / (3 * boxBound);
-
+				height = getHeight(i, j);
 				glColor3f(height / colorRange, height / colorRange, height / colorRange);
-
-				//glTexCoord2f(i, j);
 				glVertex3f(i - width / 2, j - length / 2, height);
-
 			}
 			glEnd();
 		}
@@ -712,20 +639,11 @@ GLvoid drawHeightmap()
 			glBegin(GL_LINE_STRIP);
 			for(int j = width - 1; j > 1; j--)
 			{
-				red = PIC_PIXEL(sourceImage, j, i, 0);
-				green = PIC_PIXEL(sourceImage, j, i, 1);
-				blue = PIC_PIXEL(sourceImage, j, i, 2);
-
-				height = (red + green + blue) / (3 * boxBound);
-
+				height = getHeight(j, i);
 				glColor3f(height / colorRange, height / colorRange, height / colorRange);
-
-				//glTexCoord2f(i, j);
 				glVertex3f(j - width / 2, i - length / 2, height);
-
 			}
 			glEnd();
 		}
-		//glDisable(GL_TEXTURE_2D);
 		
 }

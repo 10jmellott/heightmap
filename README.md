@@ -15,7 +15,35 @@ a surface mesh in which height is determined by pixel values. OpenGL is to be
 used to render this mesh within a skybox.
 ```
 
+###completeness###
+```
+Heightmap is completed fully, does not conform to triangles, however
+Skybox is completed fully
+Interaction is above what is asked, see below
+Video is named example.mp4
+```
+
+###extra credit###
++ Camera movement is intuitive and controlled by angles
++ Camera is 'physically' moved
++ Camera uses spherical coordinates
++ Save Image feature is also possible by right clicking
+
+
+
 ##progress##
+###Ver. 3###
+Heightmap is finished.
++ note: heightmap does not need be ground texture
++ note: heightmap uses ```GL_LINE_STRIP``` to render
++ this aids the appearance of the skybox
+
+Code has had comments added to it.
+
+```SCALE_SKYBOX``` is another compiler defined variable.
++ the default for this variable is 0 and will not scale
++ if skybox scaling is preferred, set to 1
+
 ###Ver. 2###
 Interaction is complete.
 + Skybox no longer can be translated
@@ -26,11 +54,11 @@ Interaction is complete.
 
 Skybox has an updated texture with better resolution.
 
-Heightmap still isn't complete
+Heightmap still isn't complete.
 + Heightmap still only uses GL_LINE_STRIP for its values
 + Heightmap is not the texture of the ground yet
 
-Code has been cleaned up and additional functions have been added
+Code has been cleaned up and additional functions have been added.
 + ```drawSkybox()``` and ```drawHeightmap()```
 + ```#define GL_CLAMP_TO_EDGE 0x812F``` has been added to poor texture borders
 
