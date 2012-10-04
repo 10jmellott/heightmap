@@ -32,6 +32,11 @@ Video is named example.mp4
 
 
 ##progress##
+###Ver. 4###
+Heightmap is very finished.
++ heightmap uses triangles now to acheive visual appearance
++ heightmap also uses ```DRAW_BOTTOM_TEXTURE``` to add a texture to the heightmap
+
 ###Ver. 3###
 Heightmap is finished.
 + note: heightmap does not need be ground texture

@@ -64,6 +64,7 @@ GLuint bottomTextureId;
 
 // if the skybox is to be scaled
 #define SCALE_SKYBOX 0
+#define DRAW_FLOOR_TEXTURE 1
 
 // defined to remove the black edges along the textures
 #define GL_CLAMP_TO_EDGE 0x812F
@@ -585,22 +586,28 @@ GLvoid drawSkybox()
 	glTexCoord2fv(t4);
 	glVertex3fv(v6);
 	glEnd();
-
-	glBindTexture(GL_TEXTURE_2D, bottomTextureId); 
-	glBegin(GL_QUADS);
-	glTexCoord2fv(t1);
-	glVertex3fv(v4);
-
-	glTexCoord2fv(t2);
-	glVertex3fv(v1);
-
-	glTexCoord2fv(t3);
-	glVertex3fv(v5);
-
-	glTexCoord2fv(t4);
-	glVertex3fv(v8);
-	glEnd();
 	
+	if(!DRAW_FLOOR_TEXTURE)
+	{
+		glBindTexture(GL_TEXTURE_2D, bottomTextureId); 
+		glBegin(GL_QUADS);
+		glTexCoord2fv(t1);
+		glVertex3fv(v4);
+
+
+		glTexCoord2fv(t2);
+		glVertex3fv(v1);
+
+
+		glTexCoord2fv(t3);
+		glVertex3fv(v5);
+
+
+		glTexCoord2fv(t4);
+		glVertex3fv(v8);
+		glEnd();
+	}
+
 	glDisable(GL_TEXTURE_2D);
 
 	 // Restore enable bits and matrix
@@ -619,31 +626,52 @@ GLvoid drawHeightmap()
 		// drops the heightmap down to the level of the user
 		glTranslatef(0.0, 0.0, - 1 * HEIGHTMAP_RANGE);
 
+		glEnable(GL_TEXTURE_2D);
+		glBindTexture(GL_TEXTURE_2D, bottomTextureId); 
 		// the following will draw a cross pasttern, as opposed to triangles
 		//   and allows for a much more standard mesh appearance
 		// initially centered at the location of the user
-		for(int i = width - 1; i > 1; i--)
+		glBegin(GL_TRIANGLES);
+		for(int i = length - 2; i > 1; i--)
 		{
-			glBegin(GL_LINE_STRIP);
-			for(int j = length - 1; j > 1; j--)
+			for(int j = width - 2; j > 1; j--)
 			{
+				height = getHeight(i+1, j);
+				if(DRAW_FLOOR_TEXTURE)
+					glTexCoord3f((GLfloat)(i+1) / length, (GLfloat)(j) / width, height / HEIGHTMAP_RANGE);
+				glColor3f(height / colorRange, height / colorRange, height / colorRange);
+				glVertex3f(i+1 - width / 2, j - length / 2, height);
+
 				height = getHeight(i, j);
+				if(DRAW_FLOOR_TEXTURE)
+					glTexCoord3f((GLfloat)(i) / length, (GLfloat)(j) / width, height / HEIGHTMAP_RANGE);
 				glColor3f(height / colorRange, height / colorRange, height / colorRange);
 				glVertex3f(i - width / 2, j - length / 2, height);
-			}
-			glEnd();
-		}
-	
-		for(int i = length - 1; i > 1; i--)
-		{
-			glBegin(GL_LINE_STRIP);
-			for(int j = width - 1; j > 1; j--)
-			{
-				height = getHeight(j, i);
+
+				height = getHeight(i, j+1);
+				if(DRAW_FLOOR_TEXTURE)
+					glTexCoord3f((GLfloat)(i) / length, (GLfloat)(j+1) / width, height / HEIGHTMAP_RANGE);
 				glColor3f(height / colorRange, height / colorRange, height / colorRange);
-				glVertex3f(j - width / 2, i - length / 2, height);
+				glVertex3f(i - width / 2, j+1 - length / 2, height);
+
+				height = getHeight(i+1, j);
+				glColor3f(height / colorRange, height / colorRange, height / colorRange);
+				glVertex3f(i+1 - width / 2, j - length / 2, height);
+
+				height = getHeight(i, j+1);
+				glColor3f(height / colorRange, height / colorRange, height / colorRange);
+				glVertex3f(i - width / 2, j+1 - length / 2, height);
+
+				height = getHeight(i+1, j+1);
+				if(DRAW_FLOOR_TEXTURE)
+					glTexCoord3f((GLfloat)(i+1) / length, (GLfloat)(j+1) / width, height / HEIGHTMAP_RANGE);
+				glColor3f(height / colorRange, height / colorRange, height / colorRange);
+				glVertex3f(i+1 - width / 2, j+1 - length / 2, height);
 			}
-			glEnd();
+			
 		}
+		glEnd();
+
+		glDisable(GL_TEXTURE_2D);
 		
 }
